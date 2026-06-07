@@ -61,15 +61,17 @@ def send_metrics():
         temp, humidity = read_dht()
         cpu_temp = get_cpu_temp()
         metrics = []
-        if temp is not None:
-            metrics.append({'MetricName': 'Temperature', 'Value': temp, 'Unit': 'None'})
+        temp_f = temp * 9/5 + 32 if temp is not None else None
+        cpu_temp_f = cpu_temp * 9/5 + 32 if cpu_temp is not None else None
+        if temp_f is not None:
+            metrics.append({'MetricName': 'Temperature', 'Value': temp_f, 'Unit': 'None'})
         if humidity is not None:
             metrics.append({'MetricName': 'Humidity', 'Value': humidity, 'Unit': 'Percent'})
-        if cpu_temp is not None:
-            metrics.append({'MetricName': 'CPUTemperature', 'Value': cpu_temp, 'Unit': 'None'})
+        if cpu_temp_f is not None:
+            metrics.append({'MetricName': 'CPUTemperature', 'Value': cpu_temp_f, 'Unit': 'None'})
         if metrics:
             cloudwatch.put_metric_data(Namespace='RaspberryPiHumidifier', MetricData=metrics)
-        log(f"[{datetime.now():%H:%M:%S}] Metrics sent — temp={temp}°C, humidity={humidity}%, cpu={cpu_temp}°C")
+        log(f"[{datetime.now():%H:%M:%S}] Metrics sent — temp={temp_f:.1f}°F, humidity={humidity}%, cpu={cpu_temp_f:.1f}°F")
     except Exception as e:
         log(f"Metric error: {e}")
     return humidity
