@@ -11,7 +11,7 @@ DEBUG = '--debug' in sys.argv
 RELAY_PIN = 17
 DHT_PIN = board.D4
 HUMIDITY_THRESHOLD = 80  # Turn on humidifier if humidity drops below this %
-HUMIDIFIER_DURATION = 10 * 60  # seconds
+HUMIDIFIER_DURATION = 1 * 60  # seconds
 
 GPIO.setwarnings(False)
 GPIO.setmode(GPIO.BCM)
