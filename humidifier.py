@@ -85,7 +85,7 @@ try:
         try:
             now = datetime.now()
 
-            if (now - last_metric_time).total_seconds() >= (10 if DEBUG else 3600):
+            if (now - last_metric_time).total_seconds() >= (10 if DEBUG else 600):
                 humidity = send_metrics()
                 last_metric_time = now
 
