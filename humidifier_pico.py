@@ -20,6 +20,7 @@ WIFI_PASS = config['WIFI_PASS']
 AWS_ACCESS_KEY = config['AWS_ACCESS_KEY']
 AWS_SECRET_KEY = config['AWS_SECRET_KEY']
 AWS_REGION = config['AWS_REGION']
+NAME = config['NAME']
 
 RELAY_PIN = 0
 DHT_PIN = 22
@@ -32,6 +33,12 @@ relay.value(0)
 led = machine.Pin('LED', machine.Pin.OUT)
 
 sensor = dht.DHT22(machine.Pin(DHT_PIN))
+
+
+def prefix():
+    t = time.localtime()
+    ts = '{:02d}:{:02d}:{:02d}'.format(t[3], t[4], t[5])
+    return f'[{NAME}][{ts}]'
 
 
 def connect_wifi():
@@ -183,43 +190,53 @@ def send_metrics():
         onboard_f = onboard_temp * 9/5 + 32 if onboard_temp is not None else None
 
         metrics = []
+        dims = [{'Name': 'Device', 'Value': NAME}]
         if temp_f is not None:
-            metrics.append({'MetricName': 'Temperature', 'Value': temp_f, 'Unit': 'None'})
+            metrics.append({'MetricName': 'Temperature', 'Value': temp_f, 'Unit': 'None', 'Dimensions': dims})
         if humidity is not None:
-            metrics.append({'MetricName': 'Humidity', 'Value': humidity, 'Unit': 'Percent'})
+            metrics.append({'MetricName': 'Humidity', 'Value': humidity, 'Unit': 'Percent', 'Dimensions': dims})
         if onboard_f is not None:
-            metrics.append({'MetricName': 'CPUTemperature', 'Value': onboard_f, 'Unit': 'None'})
+            metrics.append({'MetricName': 'CPUTemperature', 'Value': onboard_f, 'Unit': 'None', 'Dimensions': dims})
 
         if metrics:
             body = ujson.dumps({'Namespace': 'RaspberryPiHumidifier', 'MetricData': metrics})
             aws_request('monitoring', 'GraniteServiceVersion20100801.PutMetricData', body)
 
-        t = time.localtime()
-        ts = '{:02d}:{:02d}:{:02d}'.format(t[3], t[4], t[5])
-        log(f'[{ts}] Metrics sent — temp={temp_f:.1f}°F, humidity={humidity}%, cpu={onboard_f:.1f}°F')
+        log(f'{prefix()} Metrics sent — temp={temp_f:.1f}°F, humidity={humidity}%, cpu={onboard_f:.1f}°F')
     except Exception as e:
         log(f'Metric error: {e}')
     return humidity
 
 
 def sync_time():
+    import ntptime
     try:
-        import ntptime
         ntptime.settime()
         print('Time synced via NTP')
+        return True
     except Exception as e:
         print(f'NTP sync failed: {e}')
+        return False
 
 
 try:
     wlan = connect_wifi()
-    sync_time()
-    log('Humidifier Pico is on!')
+    time_synced = sync_time()
+    log(f'{prefix()} Humidifier Pico is on!')
     last_metric_time = 0
 
     while True:
         try:
             led.value(1)
+            time.sleep(1)
+            led.value(0)
+
+            if not wlan.isconnected():
+                print('WiFi lost, reconnecting...')
+                wlan = connect_wifi()
+            if not time_synced and wlan.isconnected():
+                time_synced = sync_time()
+
             now = time.time()
             interval = 10 if DEBUG else 600
 
@@ -229,25 +246,17 @@ try:
 
                 if humidity is not None and humidity < HUMIDITY_THRESHOLD:
                     duration = 10 if DEBUG else HUMIDIFIER_DURATION
-                    t = time.localtime()
-                    ts = '{:02d}:{:02d}:{:02d}'.format(t[3], t[4], t[5])
-                    log(f'[{ts}] Humidity {humidity:.1f}% below {HUMIDITY_THRESHOLD}% — running for {duration}s')
+                    log(f'{prefix()} Humidity {humidity:.1f}% below {HUMIDITY_THRESHOLD}% — running for {duration}s')
                     relay.value(1)
                     time.sleep(duration)
                     relay.value(0)
-                    t = time.localtime()
-                    ts = '{:02d}:{:02d}:{:02d}'.format(t[3], t[4], t[5])
-                    log(f'[{ts}] Humidifier OFF')
+                    log(f'{prefix()} Humidifier OFF')
                 else:
-                    t = time.localtime()
-                    ts = '{:02d}:{:02d}:{:02d}'.format(t[3], t[4], t[5])
-                    log(f'[{ts}] Humidity {humidity:.1f}% OK, not needed')
+                    log(f'{prefix()} Humidity {humidity:.1f}% OK, not needed')
 
-            led.value(0)
             time.sleep(1 if DEBUG else 60)
         except Exception as e:
             log(f'Loop error: {e}')
-            led.value(0)
             time.sleep(1 if DEBUG else 60)
 except KeyboardInterrupt:
     relay.value(0)
