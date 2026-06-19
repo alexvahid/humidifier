@@ -21,6 +21,7 @@ AWS_ACCESS_KEY = config['AWS_ACCESS_KEY']
 AWS_SECRET_KEY = config['AWS_SECRET_KEY']
 AWS_REGION = config['AWS_REGION']
 NAME = config['NAME']
+GITHUB_RAW_URL = config.get('GITHUB_RAW_URL', '')
 
 RELAY_PIN = 0
 DHT_PIN = 22
@@ -219,11 +220,31 @@ def sync_time():
         return False
 
 
+def ota_update():
+    if not GITHUB_RAW_URL:
+        return
+    try:
+        import urequests
+        r = urequests.get(GITHUB_RAW_URL)
+        if r.status_code == 200:
+            with open('humidifier_pico.py', 'w') as f:
+                f.write(r.text)
+            r.close()
+            print('OTA update applied, rebooting...')
+            machine.reset()
+        else:
+            print(f'OTA fetch failed: {r.status_code}')
+            r.close()
+    except Exception as e:
+        print(f'OTA error: {e}')
+
+
 try:
     wlan = connect_wifi()
     time_synced = sync_time()
     log(f'{prefix()} Humidifier Pico is on!')
     last_metric_time = 0
+    last_ota_check = time.time()
 
     while True:
         try:
@@ -253,6 +274,10 @@ try:
                     log(f'{prefix()} Humidifier OFF')
                 else:
                     log(f'{prefix()} Humidity {humidity:.1f}% OK, not needed')
+
+            if now - last_ota_check >= 86400:
+                ota_update()
+                last_ota_check = now
 
             time.sleep(1 if DEBUG else 60)
         except Exception as e:
